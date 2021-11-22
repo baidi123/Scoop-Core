@@ -90,7 +90,7 @@ function Test-DiagBucket {
 
     # Base, main added
     # TODO: Drop main in near future for security reasons
-    'main' | ForEach-Object {
+    'main', 'Base' | ForEach-Object {
         if ($all -notcontains $_) {
             Write-UserMessage -Message "'$_' bucket is not added" -Warning
             Write-UserMessage -Message @(

@@ -13,8 +13,8 @@
     }
 }
 
-$DEFAULT_UPDATE_REPO = 'https://gitee.com/glsnames/Scoop-Core'
-$DEFAULT_UPDATE_BRANCH = 'master'
+$DEFAULT_UPDATE_REPO = 'https://github.com/Ash258/Scoop-Core'
+$DEFAULT_UPDATE_BRANCH = 'main'
 # TODO: CONFIG adopt refactor
 $SHOW_UPDATE_LOG = get_config 'show_update_log' $true
 
@@ -217,12 +217,12 @@ function Update-Scoop {
     }
 
     # Add Base bucket if not already added
-    if ((Get-LocalBucket) -notcontains 'main') {
+    if ((Get-LocalBucket) -notcontains 'Base') {
         Write-UserMessage -Message 'New Base bucket was introduces, which will replace main', 'Adding Base bucket...' -Output
         try {
-            Add-Bucket -Name 'main'
+            Add-Bucket -Name 'Base'
         } catch {
-            Write-UserMessage -Message "'main' bucket cannot be added: $($_.Exception.Message)" -Err
+            Write-UserMessage -Message "'Base' bucket cannot be added: $($_.Exception.Message)" -Err
         }
     }
 
