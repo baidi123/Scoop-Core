@@ -1,6 +1,6 @@
 {
-    "Base": "https://github.com/shovel-org/Base",
-    "main": "https://github.com/ScoopInstaller/Main",
+
+    "main": "https://gitee.com/glsnames/scoop-main",
     "extras": "https://github.com/ScoopInstaller/Extras",
     "java": "https://github.com/ScoopInstaller/Java",
     "nerd-fonts": "https://github.com/matthewjberger/scoop-nerd-fonts",

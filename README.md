@@ -1,4 +1,4 @@
-# <a href="https://shovel.ash258.com"><img width=32 height=32 src="https://i.imgur.com/NQkgLgu.png"/> ~~Scoop~~ Shovel <a/> [![Build status](https://ci.appveyor.com/api/projects/status/9cso6l446o0ayo8a?svg=true)](https://ci.appveyor.com/project/Ash258/shovel) ![Latest Stable Release)](https://img.shields.io/github/v/release/Ash258/Scoop-Core?color=ffde03&label=Stable&logoColor=ffde03) ![Latest pre-releases)](https://img.shields.io/github/v/release/Ash258/Scoop-Core?color=ffde03&include_prereleases&label=NEW&logoColor=ffde03)
+# <a href="https://scoop.ash258.com"><img width=32 height=32 src="https://i.imgur.com/NQkgLgu.png"/> Scoop优化版 <a/> [![Build status](https://ci.appveyor.com/api/projects/status/9cso6l446o0ayo8a?svg=true)](https://ci.appveyor.com/project/Ash258/scoop) ![Latest Stable Release)](https://img.shields.io/github/v/release/Ash258/Scoop-Core?color=ffde03&label=Stable&logoColor=ffde03) ![Latest pre-releases)](https://img.shields.io/github/v/release/Ash258/Scoop-Core?color=ffde03&include_prereleases&label=NEW&logoColor=ffde03)
 
 Command-line installer for Windows
 
@@ -16,11 +16,11 @@ Scriptable, user-friendly command line installation of applications with a minim
 - Dependencies resolving for other Shovel installed applications
 
 ```powershell
-shovel install gsudo
-sudo shovel install --global 7zip git openssh
-shovel install aria2 curl grep sed less touch
-shovel install python ruby go perl
-shovel install extras/firefox
+scoop install gsudo
+sudo scoop install --global 7zip git openssh
+scoop install aria2 curl grep sed less touch
+scoop install python ruby go perl
+scoop install extras/firefox
 ```
 
 ## Requirements
@@ -34,12 +34,12 @@ shovel install extras/firefox
 
 ## Installation
 
-[Refer to the new installer to install base scoop.](https://github.com/ScoopInstaller/Install#scoop-uninstaller)
+[Refer to the new installer to install base scoop.](https://gitee.com/glsnames/scoop-installer#installation)
 
 As soon as base scoop is installed do the following:
 
 1. `scoop install 7zip git`
-1. `scoop config SCOOP_REPO 'https://github.com/Ash258/Scoop-Core'`
+1. `scoop config SCOOP_REPO 'https://gitee.com/glsnames/Scoop-Core'`
 1. `scoop update`
 1. `scoop status`
 1. `scoop checkup`
@@ -52,10 +52,10 @@ Shovel can utilize [`aria2`](https://github.com/aria2/aria2) to use multi-connec
 Simply install `aria2` through Shovel and it will be used for all downloads afterward.
 
 ```powershell
-shovel install aria2
+scoop install aria2
 ```
 
-Refer to `shovel help config` how to adjust aria2 specific configuration.
+Refer to `scoop help config` how to adjust aria2 specific configuration.
 
 ## Applications installed by Shovel
 
@@ -71,7 +71,7 @@ See the [runat](https://github.com/ScoopInstaller/Main/blob/master/bucket/runat.
 
 The following buckets are known to Shovel:
 
-- [Base](https://github.com/shovel-org/Base) - Rebuild of main bucket suited for Shovel usage; Archived + arm64 version support
+- [Base](https://github.com/scoop-org/Base) - Rebuild of main bucket suited for Shovel usage; Archived + arm64 version support
 - [main](https://github.com/ScoopInstaller/Main) - Default bucket for the most common command line utilities
 - [extras](https://github.com/lukesampson/scoop-extras) - GUI applications
 - [nerd-fonts](https://github.com/matthewjberger/scoop-nerd-fonts) - Nerd Fonts
