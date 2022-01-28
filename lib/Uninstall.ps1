@@ -1,7 +1,7 @@
 @(
     @('core', 'Test-ScoopDebugEnabled'),
     @('Helpers', 'New-IssuePrompt'),
-    @('install', 'install_app'),
+    @('install', 'msi_installed'),
     @('manifest', 'Resolve-ManifestInformation'),
     @('psmodules', 'install_psmodule'),
     @('shortcuts', 'rm_startmenu_shortcuts'),
@@ -69,6 +69,10 @@ function Uninstall-ScoopApplication {
     $manifest = installed_manifest $App $version $Global
     $install = install_info $App $version $Global
     $architecture = $install.architecture
+
+    if ($install.dependency_for -and (installed $install.dependency_for)) {
+        Write-UserMessage -Message "Uninstalling dependency required for installed application '$($install.dependency_for)'. This operation could negatively influence the said application." -Warning
+    }
 
     Invoke-ManifestScript -Manifest $manifest -ScriptName 'pre_uninstall' -Architecture $architecture
     run_uninstaller $manifest $architecture $dir

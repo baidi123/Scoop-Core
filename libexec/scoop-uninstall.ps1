@@ -12,7 +12,7 @@
     @('getopt', 'Resolve-GetOpt'),
     @('help', 'scoop_help'),
     @('Helpers', 'New-IssuePrompt'),
-    @('install', 'install_app'),
+    @('install', 'msi_installed'),
     @('Applications', 'Get-InstalledApplicationInformation'),
     @('manifest', 'Resolve-ManifestInformation'),
     @('psmodules', 'install_psmodule'),
@@ -38,7 +38,7 @@ $Purge = $Options.p -or $Options.purge
 if (!$Applications) { Stop-ScoopExecution -Message 'Parameter <APP> missing' -Usage (my_usage) }
 if ($Global -and !(is_admin)) { Stop-ScoopExecution -Message 'Administrator privileges are required to uninstall globally installed applications.' -ExitCode 4 }
 
-if ($Applications -eq 'scoop') {
+if ($Applications -contains 'scoop') {
     & (Join-Path $PSScriptRoot '..\bin\uninstall.ps1') $Global $Purge
     exit $LASTEXITCODE
 }
@@ -58,7 +58,7 @@ foreach ($explode in $Applications) {
     } catch {
         ++$Problems
         debug $_.InvocationInfo
-        New-IssuePromptFromException -ExceptionMessage $_.Exception.Message -Application $app -Bucket $bucket
+        New-IssuePromptFromException -ExceptionMessage $_.Exception.Message -Application $app -Bucket $bucket -Version $_.Exception.Version
 
         continue
     }

@@ -35,11 +35,8 @@ foreach ($sup in $Sups) {
         continue
     }
 
-    Remove-Module 'powershell-yaml' -ErrorAction 'SilentlyContinue' -Force
-    Start-Sleep -Seconds 2
-
     Rename-Item $dir 'old' -ErrorAction 'SilentlyContinue'
-    Confirm-DirectoryExistence -Directory $dir | Out-Null
+    Confirm-DirectoryExistence -LiteralPath $dir | Out-Null
     Start-Sleep -Seconds 2
     try {
         $fname = dl_urls $name $manifest.version $manifest '' (default_architecture) $dir $true $true
@@ -49,7 +46,7 @@ foreach ($sup in $Sups) {
     } catch {
         ++$problems
         debug $_.InvocationInfo
-        New-IssuePromptFromException -ExceptionMessage $_.Exception.Message
+        New-IssuePromptFromException -ExceptionMessage $_.Exception.Message -Version $manifest.version
 
         continue
     }

@@ -9,6 +9,7 @@ Use 'Write-UserMessage -Warning' to highlight the issue, and follow up with the 
     @('Helpers', 'New-IssuePrompt'),
     @('buckets', 'Get-KnownBucket'),
     @('decompress', 'Expand-7zipArchive'),
+    @('install', 'msi_installed'),
     @('Git', 'Invoke-GitCmd')
 ) | ForEach-Object {
     if (!([bool] (Get-Command $_[1] -ErrorAction 'Ignore'))) {
@@ -52,7 +53,7 @@ function Test-DiagWindowsDefender {
     [OutputType([bool])]
     param([Switch] $Global)
 
-    if (Test-IsUnix) { return $true }
+    if ($SHOVEL_IS_UNIX) { return $true }
 
     $defender = Get-Service -Name 'WinDefend' -ErrorAction 'SilentlyContinue'
     if ((is_admin) -and ($defender -and $defender.Status) -and ($defender.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running)) {
@@ -90,30 +91,47 @@ function Test-DiagBucket {
 
     # Base, main added
     # TODO: Drop main in near future for security reasons
-    'main' | ForEach-Object {
-        if ($all -notcontains $_) {
-            Write-UserMessage -Message "'$_' bucket is not added" -Warning
-            Write-UserMessage -Message @(
-                '  Fixable with running following command:'
-                "    scoop bucket add '$_'"
-            )
+    foreach ($b in 'main') {
+        if ($all -contains $b) { continue }
 
-            $verdict = $false
-        }
+        Write-UserMessage -Message "'$b' bucket is not added" -Warning
+        Write-UserMessage -Message @(
+            '  Fixable with running following command:'
+            "    shovel bucket add '$b'"
+        )
+
+        $verdict = $false
     }
 
     # Extras changed
     if ($all -contains 'extras') {
         $path = Find-BucketDirectory -Name 'extras' -Root
 
-        if ((Invoke-GitCmd -Repository $path -Command 'remote' -Argument 'get-url', 'origin') -match 'lukesampson') {
+        if ((Test-Path -LiteralPath $path -PathType 'Container') -and (Invoke-GitCmd -Repository $path -Command 'remote' -Argument 'get-url', 'origin') -match 'lukesampson') {
             Write-UserMessage -Message "'extras' bucket was moved" -Warning
             Write-UserMessage -Message @(
                 '  Fixable with running following command:'
-                "    scoop bucket rm 'extras'; scoop bucket add 'extras'"
+                "    shovel bucket rm 'extras'; shovel bucket add 'extras'"
             )
             $verdict = $false
         }
+    }
+
+    # Bucket migrations from my personal account to shovel-org
+    foreach ($bb in 'sysinternals', 'nirsoft') {
+        if ($all -notcontains $bb) { continue }
+
+        $path = Find-BucketDirectory -Name $bb -Root
+
+        if ((Test-Path -LiteralPath $path -PathType 'Container') -and ((Invoke-GitCmd -Repository $path -Command 'remote' -Argument 'get-url', 'origin') -match 'Ash258')) {
+            Write-UserMessage -Message "'$bb' bucket was moved" -Warning
+            Write-UserMessage -Message @(
+                '  Fixable with running following command:'
+                "    shovel bucket rm '$bb'; shovel bucket add '$bb'"
+            )
+            $verdict = $false
+        }
+
     }
 
     return $verdict
@@ -128,7 +146,7 @@ function Test-DiagLongPathEnabled {
     [OutputType([bool])]
     param()
 
-    if (Test-IsUnix) { return $true }
+    if ($SHOVEL_IS_UNIX) { return $true }
 
     # Verify supported windows version
     if ([System.Environment]::OSVersion.Version.Major -lt 10 -or [System.Environment]::OSVersion.Version.Build -lt 1607) {
@@ -153,7 +171,7 @@ function Test-DiagLongPathEnabled {
 function Test-DiagEnvironmentVariable {
     <#
     .SYNOPSIS
-        Test if scoop's related environment variables are defined.
+        Test if Shovel's related environment variables are defined.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -161,7 +179,7 @@ function Test-DiagEnvironmentVariable {
 
     $result = $true
 
-    if (Test-IsUnix) {
+    if ($SHOVEL_IS_UNIX) {
         # Unix "comspec"
         if (!(Test-Path $env:SHELL -PathType 'Leaf')) {
             Write-UserMessage -Message '''SHELL'' environment variable is not configured' -Warning
@@ -192,7 +210,7 @@ function Test-DiagEnvironmentVariable {
     }
 
     if ($env:SCOOP -ne $SCOOP_ROOT_DIRECTORY) {
-        Write-UserMessage -Message '''SCOOP'' environment variable should be set to actual scoop installation location' -Warning
+        Write-UserMessage -Message '''SCOOP'' environment variable should be set to actual Shovel installation location' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
             "    [Environment]::SetEnvironmentVariable('SCOOP', '$SCOOP_ROOT_DIRECTORY', 'User')"
@@ -230,9 +248,9 @@ function Test-DiagHelpersInstalled {
         Write-UserMessage -Message '''7-Zip'' not installed!. It is essential component for most of the manifests.' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
-            '    scoop install 7zip'
-            '  or you can configure to use 7-Zip not installed by scoop:'
-            '    scoop config ''7ZIPEXTRACT_USE_EXTERNAL'' $true'
+            '    shovel install 7zip'
+            '  or you can configure to use 7-Zip not installed by Shovel:'
+            '    shovel config ''7ZIPEXTRACT_USE_EXTERNAL'' $true'
         )
 
         $result = $false
@@ -242,7 +260,7 @@ function Test-DiagHelpersInstalled {
         Write-UserMessage -Message '''innounp'' is not installed! It is essential component for extraction of InnoSetup based installers.' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
-            '    scoop install innounp'
+            '    shovel install innounp'
         )
 
         $result = $false
@@ -252,9 +270,9 @@ function Test-DiagHelpersInstalled {
         Write-UserMessage -Message '''dark'' is not installed! It is essential component for extraction of WiX Toolset based installers.' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
-            '    scoop install dark'
+            '    shovel install dark'
             '  or'
-            '    scoop install wixtoolset'
+            '    shovel install wixtoolset'
         )
 
         $result = $false
@@ -264,7 +282,7 @@ function Test-DiagHelpersInstalled {
         Write-UserMessage -Message '''lessmsi'' is not installed! It is essential component for extraction of msi installers.' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
-            '    scoop install lessmsi'
+            '    shovel install lessmsi'
         )
 
         $result = $false
@@ -278,7 +296,7 @@ function Test-DiagHelpersInstalled {
 function Test-DiagConfig {
     <#
     .SYNOPSIS
-        Test if various recommended scoop configurations are set correctly.
+        Test if various recommended Shovel configurations are set correctly.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -289,7 +307,7 @@ function Test-DiagConfig {
         Write-UserMessage -Message '''lessmsi'' should be used for extraction of msi installers!' -Warning
         Write-UserMessage -Message @(
             '  Fixable with running following command:'
-            '    scoop install lessmsi; scoop config MSIEXTRACT_USE_LESSMSI $true'
+            '    shovel install lessmsi; shovel config MSIEXTRACT_USE_LESSMSI $true'
         )
 
         $result = $false
@@ -362,7 +380,7 @@ function Test-MainBranchAdoption {
     $scoopHome = versiondir 'scoop' 'current'
     $fix = @(
         '  Fixable with running following command:'
-        '    scoop update'
+        '    shovel update'
     )
 
     # Shovel - empty config
@@ -414,7 +432,7 @@ function Test-ScoopConfigFile {
         Write-UserMessage -Message 'Configuration file does not exists.' -Warn
         Write-UserMessage -Message @(
             '  Fixable with running following commands:'
-            '    scoop update'
+            '    shovel update'
         )
 
         $verdict = $false
@@ -432,10 +450,10 @@ function Test-ScoopConfigFile {
     }
 
     $toFix = @()
-    'rootPath', 'globalPath', 'cachePath' | ForEach-Object {
-        $c = get_config $_
+    foreach ($tc in 'rootPath', 'globalPath', 'cachePath') {
+        $c = get_config $tc
         if ($c) {
-            $toFix += $_
+            $toFix += $tc
 
             $verdict = $false
         }
@@ -444,7 +462,7 @@ function Test-ScoopConfigFile {
         Write-UserMessage -Message 'Some configuration options are no longer supported.' -Warn
         Write-UserMessage -Message @(
             '  Fixable with running following commands:'
-            ($toFix | ForEach-Object { "    scoop config rm '$_'" })
+            ($toFix | ForEach-Object { "    shovel config rm '$_'" })
         )
     }
 

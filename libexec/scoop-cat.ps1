@@ -1,5 +1,6 @@
 # Usage: scoop cat [<OPTIONS>] <APP>...
 # Summary: Show content of specified manifest(s).
+# Help: Supports the same format of <APP> parameter as in "scoop install" (See: 'scoop install --help')
 #
 # Options:
 #   -h, --help                  Show help for this command.
@@ -10,7 +11,7 @@
     @('getopt', 'Resolve-GetOpt'),
     @('help', 'scoop_help'),
     @('Helpers', 'New-IssuePrompt'),
-    @('install', 'install_app'),
+    @('install', 'msi_installed'),
     @('manifest', 'Resolve-ManifestInformation')
 ) | ForEach-Object {
     if (!([bool] (Get-Command $_[1] -ErrorAction 'Ignore'))) {

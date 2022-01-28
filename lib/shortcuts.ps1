@@ -34,7 +34,7 @@ function shortcut_folder($global) {
     $base = if ($global) { 'commonstartmenu' } else { 'startmenu' }
     $directory = [System.Environment]::GetFolderPath($base) | Join-Path -ChildPath 'Programs\Scoop Apps'
 
-    return ensure $directory
+    return Confirm-DirectoryExistence -LiteralPath $directory
 }
 
 function startmenu_shortcut([System.IO.FileInfo] $target, $shortcutName, $arguments, [System.IO.FileInfo]$icon, $global) {
@@ -53,7 +53,7 @@ function startmenu_shortcut([System.IO.FileInfo] $target, $shortcutName, $argume
     $scoop_startmenu_folder = shortcut_folder $global
     $subdirectory = [System.IO.Path]::GetDirectoryName($shortcutName)
     if ($subdirectory) {
-        $subdirectory = ensure $([System.IO.Path]::Combine($scoop_startmenu_folder, $subdirectory))
+        $subdirectory = Confirm-DirectoryExistence -LiteralPath ([System.IO.Path]::Combine($scoop_startmenu_folder, $subdirectory))
     }
 
     $wsShell = New-Object -ComObject WScript.Shell

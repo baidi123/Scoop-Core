@@ -57,7 +57,7 @@ function Get-UserAgent {
         'AMD64' { $arch = 'Win64; x64;' }
     }
 
-    if (Test-IsUnix) {
+    if ($SHOVEL_IS_UNIX) {
         $system = Invoke-SystemComSpecCommand -Unix 'uname -s'
         $arch = Invoke-SystemComSpecCommand -Unix 'uname -srv'
         $arch = "$arch;"
@@ -89,13 +89,13 @@ function Test-IsUnix {
     .SYNOPSIS
         Custom check to identify non-windows hosts.
     .DESCRIPTION
-        $isWindows is not defind in PW5, thus null and boolean checks are needed.
+        $IsWindows is not defind in PW5, thus null and boolean checks are needed.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
     param()
 
-    process { return !(($null -eq $isWindows) -or ($isWindows -eq $true)) }
+    process { return !(($null -eq $IsWindows) -or ($IsWindows -eq $true)) }
 }
 
 function Invoke-SystemComSpecCommand {
@@ -114,7 +114,7 @@ function Invoke-SystemComSpecCommand {
     )
 
     process {
-        if (Test-IsUnix) {
+        if ($SHOVEL_IS_UNIX) {
             $shell = $env:SHELL
             $parameters = @('-c', $Unix)
         } else {
@@ -131,6 +131,96 @@ function Invoke-SystemComSpecCommand {
     }
 }
 
+#region TODO: Extract lib/Installation.ps1
+function New-DirectoryJunctionLink {
+    <#
+    .SYNOPSIS
+        Creates a new directory junction.
+    .DESCRIPTION
+        On Unix ln --symbolic will be used instead.
+        On Windows +R attribute will be set on the link.
+    .PARAMETER Target
+        Specifies the real directory path.
+    .PARAMETER LinkName
+        Specifies the symbolic link name.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [String] $Target, [Parameter(Mandatory)] [String] $LinkName)
+
+    process {
+        Invoke-SystemComSpecCommand `
+            -Windows "MKLINK /J ""$LinkName"" ""$Target""&&ATTRIB +R ""$LinkName"" /L" `
+            -Unix "ln --symbolic '$Target' '$LinkName'"
+    }
+}
+
+function Remove-DirectoryJunctionLink {
+    <#
+    .SYNOPSIS
+        Removes directory junction.
+    .PARAMETER Target
+        Specifies the directory junction path.
+    .PARAMETER Recurse
+        Specifies to use /S /Q on Windows.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Alias('Link', 'Target', 'LiteralPath', 'Path', 'Directory')]
+        [String] $LinkName,
+        [Switch] $Recurse
+    )
+
+    process {
+        $prm = if ($Recurse) { '/S /Q ' } else { '' }
+
+        Invoke-SystemComSpecCommand `
+            -Windows "ATTRIB -R /L ""$LinkName""&&RMDIR $prm""$LinkName""" `
+            -Unix "rm '$LinkName'"
+    }
+}
+
+function New-FileHardLink {
+    <#
+    .SYNOPSIS
+        Create a new file hard link.
+    .PARAMETER Target
+        Specifies the real directory path.
+    .PARAMETER LinkName
+        Specifies the symbolic link name.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [String] $Target, [Parameter(Mandatory)] [String] $LinkName)
+
+    process {
+        Invoke-SystemComSpecCommand `
+            -Windows "MKLINK /H ""$LinkName"" ""$Target""" `
+            -Unix "ln '$Target' '$LinkName'"
+    }
+}
+
+function Remove-FileHardLink {
+    <#
+    .SYNOPSIS
+        Removes file hard link.
+    .PARAMETER Target
+        Specifies the full path to the link.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [Alias('Link', 'Target', 'LiteralPath', 'Path')]
+        [String] $LinkName
+    )
+
+    process {
+        Invoke-SystemComSpecCommand `
+            -Windows "DEL ""$LinkName""" `
+            -Unix "rm '$LinkName'"
+    }
+}
+#endregion TODO: Extract lib/Installation.ps1
+
 function Test-IsArmArchitecture {
     <#
     .SYNOPSIS
@@ -141,7 +231,7 @@ function Test-IsArmArchitecture {
     param()
 
     process {
-        if (Test-IsUnix) {
+        if ($SHOVEL_IS_UNIX) {
             return (Invoke-SystemComSpecCommand -Unix 'uname -m') -like 'aarch*'
         } else {
             return $env:PROCESSOR_IDENTIFIER -like 'ARMv*'
@@ -149,6 +239,7 @@ function Test-IsArmArchitecture {
     }
 }
 
+#region TODO: Extract lib/Config.ps1
 function load_cfg($file) {
     if (!(Test-Path $file)) { return $null }
 
@@ -167,7 +258,7 @@ function get_config($name, $default) {
 
 function set_config($name, $value) {
     if ($null -eq $SCOOP_CONFIGURATION -or $SCOOP_CONFIGURATION.Count -eq 0) {
-        Split-Path -Path $SCOOP_CONFIGURATION_FILE | ensure | Out-Null
+        Split-Path -Path $SCOOP_CONFIGURATION_FILE | Confirm-DirectoryExistence | Out-Null
         $SCOOP_CONFIGURATION = New-Object PSObject
         $SCOOP_CONFIGURATION | Add-Member -MemberType 'NoteProperty' -Name $name -Value $value
     } else {
@@ -187,6 +278,7 @@ function set_config($name, $value) {
 
     return $SCOOP_CONFIGURATION
 }
+#endregion TODO: Extract lib/Config.ps1
 
 function setup_proxy() {
     # '@' and ':' in password must be escaped, e.g. 'p@ssword' -> p\@ssword'
@@ -231,13 +323,6 @@ function is_admin {
     return ([System.Security.Principal.WindowsPrincipal]($id)).IsInRole($admin)
 }
 
-# messages
-function abort($msg, [int] $exit_code = 3) { Write-UserMessage -Message $msg -Err; exit $exit_code }
-function error($msg) { Write-Host "ERROR $msg" -ForegroundColor 'DarkRed' }
-function warn($msg) { Write-Host "WARN  $msg" -ForegroundColor 'DarkYellow' }
-function info($msg) { Write-Host "INFO  $msg" -ForegroundColor 'DarkGray' }
-function message($msg) { Write-Host "$msg" }
-
 function Test-ScoopDebugEnabled {
     <#
     .SYNOPSIS
@@ -247,9 +332,10 @@ function Test-ScoopDebugEnabled {
     [OutputType([bool])]
     param()
 
-    $configDebug = (get_config 'debug' $false) -eq [bool]::TrueString
+    $configDebug = get_config 'debug' $false
+    $configDebug = ($configDebug -eq $true) -or ($configDebug -eq [bool]::TrueString) -or ($configDebug -eq '1')
     $envDebug = $env:SCOOP_DEBUG
-    $envDebug = ([bool] $envDebug) -or (($envDebug -eq [bool]::TrueString) -or ($envDebug -eq 1))
+    $envDebug = ($envDebug -eq [bool]::TrueString) -or ($envDebug -eq '1')
 
     return $configDebug -or $envDebug
 }
@@ -261,7 +347,7 @@ function debug($obj) {
     .PARAMETER obj
         Specifies object/variable to be shown.
     #>
-    if (!(Test-ScoopDebugEnabled)) { return }
+    if (!$SHOVEL_DEBUG_ENABLED) { return }
 
     $prefix = "DEBUG[$(Get-Date -UFormat %s)]"
     $param = $MyInvocation.Line.Replace($MyInvocation.InvocationName, '').Trim()
@@ -287,7 +373,6 @@ function debug($obj) {
         Write-Host " -> $($MyInvocation.PSCommandPath):$($MyInvocation.ScriptLineNumber):$($MyInvocation.OffsetInLine)" -ForegroundColor 'DarkGray'
     }
 }
-function success($msg) { Write-Host $msg -ForegroundColor 'DarkGreen' }
 
 function filesize($length) {
     $gb = [System.Math]::Pow(2, 30)
@@ -335,37 +420,6 @@ function installed_apps($global) {
     if (Test-Path $dir) { Get-ChildItem $dir -Exclude 'scoop' -Directory | Select-Object -ExpandProperty 'Name' }
 }
 
-function Get-AppFilePath {
-    <#
-    .SYNOPSIS
-        Get full path to the specific executable under specific application installed via scoop.
-    .PARAMETER App
-        Specifies the scoop's application name.
-    .PARAMETER File
-        Specifies the executable name.
-    #>
-    [CmdletBinding()]
-    [OutputType([String])]
-    param(
-        [Parameter(Mandatory)]
-        [String] $App,
-        [Parameter(Mandatory)]
-        [String] $File
-    )
-
-    # TODO: Support NO_JUNCTIONS
-    # Normal path to file
-    $path = versiondir $App 'current' $false | Join-Path -ChildPath $File
-    if (Test-Path $path) { return $path }
-
-    # Global path to file
-    $path = versiondir $App 'current' $true | Join-Path -ChildPath $File
-    if (Test-Path $path) { return $path }
-
-    # Not found
-    return $null
-}
-
 function Test-CommandAvailable {
     <#
     .SYNOPSIS
@@ -378,77 +432,6 @@ function Test-CommandAvailable {
     param ([Parameter(Mandatory, ValueFromPipeline)] [Alias('Command')] [String] $Name)
 
     process { return [bool] (Get-Command $Name -ErrorAction 'Ignore') }
-}
-
-function Get-HelperPath {
-    <#
-    .SYNOPSIS
-        Get full path to the often used application's executables.
-    .PARAMETER Helper
-        Specifies the name of helper application.
-    #>
-    [CmdletBinding()]
-    [OutputType([String])]
-    param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [ValidateSet('7zip', 'Lessmsi', 'Innounp', 'Dark', 'Aria2', 'Zstd', 'Innoextract')]
-        [String] $Helper
-    )
-
-    process {
-        $helperPath = $null
-        switch ($Helper) {
-            'Aria2' { $helperPath = Get-AppFilePath 'aria2' 'aria2c.exe' }
-            'Innounp' { $helperPath = Get-AppFilePath 'innounp' 'innounp.exe' }
-            'Lessmsi' { $helperPath = Get-AppFilePath 'lessmsi' 'lessmsi.exe' }
-            'Zstd' { $HelperPath = Get-AppFilePath 'zstd' 'zstd.exe' }
-            'Innoextract' { $HelperPath = Get-AppFilePath 'innoextract' 'innoextract.exe' }
-            '7zip' {
-                $helperPath = Get-AppFilePath '7zip' '7z.exe'
-                if ([String]::IsNullOrEmpty($helperPath)) {
-                    $helperPath = Get-AppFilePath '7zip-zstd' '7z.exe'
-                }
-            }
-            'Dark' {
-                $helperPath = Get-AppFilePath 'dark' 'dark.exe'
-                if ([String]::IsNullOrEmpty($helperPath)) {
-                    $helperPath = Get-AppFilePath 'wixtoolset' 'dark.exe'
-                }
-            }
-        }
-
-        return $helperPath
-    }
-}
-
-function Test-HelperInstalled {
-    <#
-    .SYNOPSIS
-        Test if specified widely used application is installed.
-    .PARAMETER Helper
-        Specifies the name of application.
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param(
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [ValidateSet('7zip', 'Lessmsi', 'Innounp', 'Dark', 'Aria2', 'Zstd', 'Innoextract')]
-        [String] $Helper
-    )
-
-    process { return ![String]::IsNullOrWhiteSpace((Get-HelperPath -Helper $Helper)) }
-}
-
-function Test-Aria2Enabled {
-    <#
-    .SYNOPSIS
-        Test if aria2 application is installed and enabled.
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    param()
-
-    process { return (Test-HelperInstalled -Helper 'Aria2') -and (get_config 'aria2-enabled' $true) }
 }
 
 # paths
@@ -477,39 +460,6 @@ function url_remote_filename($url) {
     return $basename
 }
 
-function ensure {
-    <#
-    .SYNOPSIS
-        Make sure that directory exists.
-    .PARAMETER Directory
-        Specifies directory to be tested and created.
-    .OUTPUTS
-        System.Management.Automation.PathInfo
-            Resolved path
-    #>
-    [CmdletBinding()]
-    [OutputType([System.Management.Automation.PathInfo])]
-    param([Parameter(Mandatory, ValueFromPipeline)] [Alias('Dir', 'Path', 'LiteralPath')] $Directory)
-
-    process {
-        if (!(Test-Path $Directory)) { New-Item $Directory -ItemType 'Directory' | Out-Null }
-
-        return Resolve-Path $Directory
-    }
-}
-
-function relpath {
-    <#
-    .SYNOPSIS
-        Returns relative path to caller.
-    #>
-    [CmdletBinding()]
-    [OutputType([String])]
-    param([String] $Path)
-
-    process { return Join-Path $MyInvocation.PSScriptRoot $Path }
-}
-
 function friendly_path($path) {
     $h = (Get-PSProvider 'FileSystem').Home
     if (!$h.EndsWith('\')) { $h += '\' }
@@ -517,7 +467,6 @@ function friendly_path($path) {
 
     return "$path" -replace ([System.Text.RegularExpressions.Regex]::Escape($h)), '~\'
 }
-function is_local($path) { return ($path -notmatch '^https?://') -and (Test-Path $path) }
 
 # operations
 
@@ -614,12 +563,14 @@ function Invoke-ExternalCommand {
     return $true
 }
 
+#region TODO: Extract lib/Download.ps1
 function dl($url, $to) {
     $wc = New-Object System.Net.Webclient
     $wc.Headers.Add('Referer', (strip_filename $url))
     $wc.Headers.Add('User-Agent', $SHOVEL_USERAGENT)
     $wc.DownloadFile($url, $to)
 }
+#endregion TODO: Extract lib/Download.ps1
 
 # TODO: Unix
 function env($name, $global, $val = '__get') {
@@ -650,6 +601,7 @@ function isFileLocked([string]$path) {
 function is_directory([String] $path) { return (Test-Path $path) -and (Get-Item $path) -is [System.IO.DirectoryInfo] }
 
 # Move content of directory into different directory
+# TODO: Monkey patch for Unix Ash258/Scoop-Core#103
 function movedir {
     [CmdletBinding()]
     param ($from, $to)
@@ -671,7 +623,7 @@ function movedir {
 
     if ($proc.ExitCode -ge 8) {
         debug $out
-        throw [ScoopException] "Decompress Error|-Could not find '$(fname $from) in $parent'! (error $($proc.ExitCode))" # TerminatingError thrown
+        throw [ScoopException]::new("Decompress Error|-Could not find '$(fname $from) in $parent'! (error $($proc.ExitCode))") # TerminatingError thrown
     }
 
     # Wait for robocopy to terminate its threads
@@ -680,6 +632,7 @@ function movedir {
     }
 }
 
+#region TODO: Extract lib/Installation.ps1 / lib/Shimming.ps1
 function get_app_name($path) {
     if ($path -match '([^/\\]+)[/\\]current[/\\]') {
         return $matches[1].ToLower()
@@ -708,9 +661,9 @@ function warn_on_overwrite($shim_ps1, $path) {
 }
 
 function shim($path, $global, $name, $arg) {
-    if (!(Test-Path $path)) { throw [ScoopException] "Shim creation fail|-Cannot shim '$(fname $path)': could not find '$path'" } # TerminatingError thrown
+    if (!(Test-Path $path)) { throw [ScoopException]::new("Shim creation fail|-Cannot shim '$(fname $path)': could not find '$path'") } # TerminatingError thrown
 
-    $abs_shimdir = shimdir $global | ensure
+    $abs_shimdir = shimdir $global | Confirm-DirectoryExistence
     if (!$name) { $name = strip_ext (fname $path) }
 
     $shim = Join-Path $abs_shimdir $name.ToLower()
@@ -745,7 +698,7 @@ function shim($path, $global, $name, $arg) {
 
     if ($path -match '\.(exe|com)$') {
         # for programs with no awareness of any shell
-        $executableName = if (Test-IsArmArchitecture) { 'shim.arm64.exe' } else { 'shim.exe' }
+        $executableName = if ($SHOVEL_IS_ARM_ARCH) { 'shim.arm64.exe' } else { 'shim.exe' }
         # TODO: Use relative path from this file
         $shimExePath = versiondir 'scoop' 'current' | Join-Path -ChildPath "supporting\shimexe\bin\$executableName"
 
@@ -778,6 +731,7 @@ powershell -noprofile -ex unrestricted `"& '$resolved_path' $arg %args%;exit `$L
         "#!/bin/sh`njava -jar `"$resolved_path`" $arg `"$@`"" | Out-File $shim -Encoding 'Ascii'
     }
 }
+#endregion TODO: Extract lib/Installation.ps1 / lib/Shimming.ps1
 
 function search_in_path($target) {
     $path = (env 'PATH' $false) + ';' + (env 'PATH' $true)
@@ -788,8 +742,10 @@ function search_in_path($target) {
     }
 }
 
-# TODO: Unix
 function ensure_in_path($dir, $global) {
+    # TODO: Properly handle unix
+    if ($SHOVEL_IS_UNIX) { return }
+
     $path = env 'PATH' $global
     if ($path -notmatch [System.Text.RegularExpressions.Regex]::Escape($dir)) {
         Write-UserMessage -Message "Adding $(friendly_path $dir) to $(if($global){'global'}else{'your'}) path." -Output
@@ -842,7 +798,7 @@ function remove_from_path($dir, $global) {
 }
 
 function ensure_scoop_in_path($global) {
-    $abs_shimdir = shimdir $global | ensure
+    $abs_shimdir = shimdir $global | Confirm-DirectoryExistence
     # be aggressive (b-e-aggressive) and install scoop first in the path
     ensure_in_path $abs_shimdir $global
 }
@@ -920,6 +876,7 @@ function format_hash([String] $hash) {
     return $hash
 }
 
+#region TODO: Extract lib/Download.aria.ps1
 function format_hash_aria2([String] $hash) {
     $hash = $hash -split ':' | Select-Object -Last 1
 
@@ -933,7 +890,9 @@ function format_hash_aria2([String] $hash) {
 
     return $hash
 }
+#region TODO: Extract lib/Download.aria.ps1
 
+#region TODO: Extract lib/Download.ps1
 function get_hash([String] $multihash) {
     $type, $hash = $multihash -split ':'
     # no type specified, assume sha256
@@ -973,6 +932,7 @@ function handle_special_urls($url) {
 
     return $url
 }
+#endregion TODO: Extract lib/Download.ps1
 
 function Resolve-ArchitectureParameter {
     [CmdletBinding()]
@@ -996,6 +956,14 @@ function Resolve-ArchitectureParameter {
 }
 
 #region Deprecated
+function ensure {
+    param([Parameter(Mandatory, ValueFromPipeline)] [Alias('Dir', 'Path', 'LiteralPath')] $Directory)
+
+    process {
+        return Confirm-DirectoryExistence -LiteralPath $Directory
+    }
+}
+
 function file_path($app, $file) {
     Show-DeprecatedWarning $MyInvocation 'Get-AppFilePath'
     return Get-AppFilePath -App $app -File $file
@@ -1010,8 +978,16 @@ function fullpath($path) {
     Show-DeprecatedWarning $MyInvocation 'Get-AbsolutePath'
     return Get-AbsolutePath -Path $path
 }
+
+function abort($msg, $exit_code = 3) { Stop-ScoopExecution -Message $msg -ExitCode $exit_code }
+function error($msg) { Write-UserMessage -Message $msg -Err }
+function warn($msg) { Write-UserMessage -Message $msg -Warning }
+function info($msg) { Write-UserMessage -Message $msg -Info }
+function message($msg) { Write-UserMessage -Message $msg -SkipSeverity }
+function success($msg) { Write-UserMessage -Message $msg -Success }
 #endregion Deprecated
 
+#region Main
 ##################
 # Core Bootstrap #
 ##################
@@ -1020,6 +996,10 @@ function fullpath($path) {
 #       for all communication with api.github.com
 Optimize-SecurityProtocol
 
+# General variables
+$SHOVEL_DEBUG_ENABLED = Test-ScoopDebugEnabled
+$SHOVEL_IS_UNIX = Test-IsUnix
+$SHOVEL_IS_ARM_ARCH = Test-IsArmArchitecture
 $SHOVEL_USERAGENT = Get-UserAgent
 
 # TODO: Drop
@@ -1075,3 +1055,4 @@ $PSNativeCommandArgumentPassing = 'Legacy'
 
 # Setup proxy globally
 setup_proxy
+#endregion Main

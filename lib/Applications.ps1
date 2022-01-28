@@ -3,7 +3,7 @@
     @('Helpers', 'New-IssuePrompt'),
     @('json', 'ConvertToPrettyJson'),
     @('manifest', 'Resolve-ManifestInformation'),
-    @('depends', 'script_deps'),
+    @('Dependencies', 'Resolve-DependsProperty'),
     @('Versions', 'Clear-InstalledVersion')
 ) | ForEach-Object {
     if (!([bool] (Get-Command $_[1] -ErrorAction 'Ignore'))) {
@@ -135,7 +135,7 @@ function Set-InstalledApplicationInformationPropertyValue {
         $info = if ($InputObject) { $InputObject } else { Get-InstalledApplicationInformation -AppName $AppName -Version $Version -Global:$Global }
         if (!$info) { $info = @{ } }
         if ($Property.Count -ne $Value.Count) {
-            throw [ScoopException] 'Property and value mismatch'
+            throw [ScoopException]::new('Property and value mismatch')
         }
     }
 
@@ -149,7 +149,7 @@ function Set-InstalledApplicationInformationPropertyValue {
                 if ($Force) {
                     $info.$prop = $val
                 } else {
-                    throw [ScoopException] "Property '$prop' is already set"
+                    throw [ScoopException]::new("Property '$prop' is already set")
                 }
             } else {
                 $info | Add-Member -MemberType 'NoteProperty' -Name $prop -Value $val
@@ -176,15 +176,26 @@ function app_status($app, $global) {
 
     $install_info = install_info $app $status.version $global
 
+    $status.install_info = $install_info
     $status.failed = (!$install_info -or !$status.version)
     $status.hold = ($install_info.hold -eq $true)
-
-    $manifest = manifest $app $install_info.bucket $install_info.url
     $status.bucket = $install_info.bucket
-    $status.removed = (!$manifest)
-    if ($manifest.version) {
-        $status.latest_version = $manifest.version
+    $status.removed = $false
+
+    $todo = $app
+    if ($install_info.bucket) {
+        $todo = "$($install_info.bucket)/$app"
+    } elseif ($install_info.url) {
+        $todo = $install_info.url
     }
+    $manifest = $null
+    try {
+        $manifest = (Resolve-ManifestInformation -ApplicationQuery $todo).ManifestObject
+    } catch {
+        $status.removed = $true
+    }
+
+    if ($manifest.version) { $status.latest_version = $manifest.version }
 
     $status.outdated = $false
     if ($status.version -and $status.latest_version) {
@@ -192,9 +203,16 @@ function app_status($app, $global) {
     }
 
     $status.missing_deps = @()
-    $deps = @(runtime_deps $manifest) | Where-Object {
-        $app, $bucket, $null = parse_app $_
-        return !(installed $app)
+    # TODO: This is not correct. Why would you check dependencies of the potential newer version of application?
+    #   scoop-manifest should be used instead
+    # TODO: Better handle different dependencies version
+    $deps = @(Resolve-DependsProperty -Manifest $manifest) | Where-Object {
+        try {
+            $res = Resolve-ManifestInformation -ApplicationQuery $_ -Simple
+            return !(installed $res.ApplicationName)
+        } catch {
+            return $true
+        }
     }
 
     if ($deps) { $status.missing_deps += , $deps }
@@ -213,6 +231,7 @@ function Confirm-InstallationStatus {
         Specifies to check globally installed applications.
     #>
     [CmdletBinding()]
+    [OutputType([System.Object[]])]
     param(
         [Parameter(Mandatory)]
         [String[]] $Apps,
@@ -221,11 +240,10 @@ function Confirm-InstallationStatus {
     $Global | Out-Null # PowerShell/PSScriptAnalyzer#1472
     $installed = @()
 
-    $Apps | Select-Object -Unique | Where-Object -Property 'Name' -NE -Value 'scoop' | ForEach-Object {
-        # TODO: Adopt Resolve-ManifestInformation
-        # Should not be needed to resolve, as it will contain only valid installed applications
-        $app, $null, $null = parse_app $_
-        $buc = (app_status $app $Global).bucket
+    foreach ($app in $Apps | Select-Object -Unique | Where-Object -Property 'Name' -NE -Value 'scoop' | Where-Object { $_ -ne 'scoop' }) {
+        $info = install_info $app (Select-CurrentVersion -AppName $app -Global:$Global) $Global
+        $buc = $info.bucket
+
         if ($Global) {
             if (installed $app $true) {
                 $installed += , @($app, $true, $buc)
@@ -248,4 +266,59 @@ function Confirm-InstallationStatus {
     }
 
     return , $installed
+}
+
+function Test-ResolvedObjectIsInstalled {
+    [CmdletBinding()]
+    [OutputType([System.Boolean])]
+    param($ResolvedObject, [Switch] $Global)
+
+    process {
+        $app = $ResolvedObject.ApplicationName
+        $gf = if ($Global) { ' --global' } else { '' }
+
+        if (installed $app $Global) {
+            $installedVersion = Select-CurrentVersion -AppName $app -Global:$Global
+            $info = install_info $app $installedVersion $Global
+
+            if ($info.hold -and ($info.hold -eq $true)) {
+                Write-UserMessage -Message @(
+                    "'$app' is being held."
+                    "Use 'scoop unhold$gf $app' to unhold the application first and then try again."
+                ) -Warning
+
+                return $true
+            }
+
+            # Test if explicitly provided version is installed
+            if ($ResolvedObject.RequestedVersion) {
+                $all = @(Get-InstalledVersion -AppName $app -Global:$Global)
+
+                $verdict = $all -contains $ResolvedObject.RequestedVersion
+                if ($verdict) {
+                    Write-UserMessage -Message "'$app' ($($ResolvedObject.RequestedVersion)) is already installed." -Warning
+                }
+
+                return $verdict
+            }
+
+            if (!$info) {
+                Write-UserMessage -Err -Message @(
+                    "It looks like a previous installation of '$app' failed."
+                    "Run 'scoop uninstall$gf $app' before retrying the install."
+                )
+
+                return $true
+            }
+
+            Write-UserMessage -Message @(
+                "'$app' ($installedVersion) is already installed.",
+                "Use 'scoop update$gc $app' to install a new version."
+            ) -Warning
+
+            return $true
+        }
+
+        return $false
+    }
 }

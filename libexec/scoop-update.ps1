@@ -20,8 +20,8 @@
     @('help', 'scoop_help'),
     @('Helpers', 'New-IssuePrompt'),
     @('Applications', 'Get-InstalledApplicationInformation'),
-    @('depends', 'script_deps'),
-    @('install', 'install_app'),
+    @('Dependencies', 'Resolve-DependsProperty'),
+    @('install', 'msi_installed'),
     @('manifest', 'Resolve-ManifestInformation'),
     @('Uninstall', 'Uninstall-ScoopApplication'),
     @('Update', 'Update-ScoopCoreClone'),
@@ -54,7 +54,8 @@ if (!$Applications) {
     Update-Scoop
 } else {
     if ($Global -and !(is_admin)) { Stop-ScoopExecution -Message 'Admin privileges are required to manipulate with globally installed applications' -ExitCode 4 }
-    if (is_scoop_outdated) { Update-Scoop }
+
+    Update-Scoop -CheckLastUpdate
 
     $outdatedApplications = @()
     $failedApplications = @()
@@ -75,7 +76,7 @@ if (!$Applications) {
 
             if ($force -or $status.outdated) {
                 if ($status.hold) {
-                    Write-UserMessage "'$app' is held to version $($status.version)"
+                    Write-UserMessage -Message "'$app' is held to version $($status.version)"
                 } else {
                     $outdatedApplications += applist $app $global $bb
                     $globText = if ($global) { ' (global)' } else { '' }
@@ -102,7 +103,7 @@ if (!$Applications) {
             ++$Problems
             $failedApplications += $out[0]
             debug $_.InvocationInfo
-            New-IssuePromptFromException -ExceptionMessage $_.Exception.Message -Application $out[0] -Bucket $out[2]
+            New-IssuePromptFromException -ExceptionMessage $_.Exception.Message -Application $out[0] -Bucket $out[2] -Version $_.Exception.Version
         }
     }
 }

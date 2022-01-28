@@ -25,7 +25,7 @@ function Test-Persistence {
         Value should be array of strings or string.
     .PARAMETER Execution
         Specifies custom scriptblock to run when file is not persisted.
-        https://github.com/lukesampson/scoop-extras/blob/a84b257fd9636d02295b48c3fd32826487ca9bd3/bucket/ditto.json#L25-L33
+        https://github.com/ScoopInstaller/Extras/blob/a84b257fd9636d02295b48c3fd32826487ca9bd3/bucket/ditto.json#L25-L33
     .PARAMETER Force
         If file does not exist in $persist_dir, but in $dir, -Force has to be used to overwrite $dir file.
     #>
@@ -190,7 +190,7 @@ function Assert-Administrator {
     .SYNOPSIS
         Test administrator privileges.
     #>
-    if (!(is_admin)) { throw [ScoopException] 'Administrator privileges are required' }
+    if (!(is_admin)) { throw [ScoopException]::new('Administrator privileges are required') }
 }
 
 function Assert-WindowsMinimalVersion {
@@ -202,7 +202,7 @@ function Assert-WindowsMinimalVersion {
 
     $cmp = Compare-Version -ReferenceVersion ([Environment]::OSVersion.Version.ToString()) -DifferenceVersion $Version
     if ($cmp -eq 1) {
-        throw [ScoopException] "Application requires at least '$Version' Windows version"
+        throw [ScoopException]::new("Application requires at least '$Version' Windows version")
     }
 }
 
@@ -221,7 +221,7 @@ function Assert-ScoopConfigValue {
 
     process {
         $actualValue = get_config $ConfigOption
-        if ($actualValue -ne $ExpectedValue) { throw [ScoopException] "Configuration option '$ConfigOption' needs to be set to '$ExpectedValue'" }
+        if ($actualValue -ne $ExpectedValue) { throw [ScoopException]::new("Configuration option '$ConfigOption' needs to be set to '$ExpectedValue'") }
     }
 }
 #endregion Asserts
