@@ -1,6 +1,6 @@
 {
 
-    "main": "https://gitee.com/glsnames/scoop-main",
+    "main": "https://gitee.com/glsnames/scoop-base",
     "extras": "https://github.com/ScoopInstaller/Extras",
     "java": "https://github.com/ScoopInstaller/Java",
     "nerd-fonts": "https://github.com/matthewjberger/scoop-nerd-fonts",
